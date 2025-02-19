@@ -133,7 +133,7 @@ public class JValidityPeriod extends JPanel {
 
         switch (periodType) {
         case YEARS:
-            model = new SpinnerNumberModel(1, 1, 100, 1);
+            model = new SpinnerNumberModel(1, 1, 10000, 1);
             break;
         case MONTHS:
             model = new SpinnerNumberModel(1, 1, 12, 1);
