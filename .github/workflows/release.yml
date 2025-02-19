@@ -67,30 +67,6 @@ jobs:
             kse/build/distributions/kse-*.zip
             kse/build/distributions/kse-*-setup-no-jre.exe
 
-  linux:
-    name: Create artifacts on Linux
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Disable automatic EOL conversions
-        run: git config --global core.autocrlf false
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Set up JDK
-        uses: actions/setup-java@v2
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-      - name: Build with Gradle
-        run: ./gradlew test buildDeb buildRpm
-        working-directory: kse
-      - name: Store artifacts for release
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-artifacts
-          path: |
-            kse/build/distributions/kse*.deb
-            kse/build/distributions/kse*.rpm
-
   windows-with-jre:
     name: Create a Windows installer with included JRE
     needs: [launcher]
@@ -120,88 +96,8 @@ jobs:
           name: windows-with-jre-artifact
           path: kse/build/distributions/kse-*-setup.exe
 
-  macos:
-    name: Create artifacts on macOS
-    runs-on: macos-13
-    steps:
-      - name: Preparations
-        env:
-          MACOS_CERT: ${{ secrets.MACOS_CERT }}
-          MACOS_CERT_PWD: ${{ secrets.MACOS_CERT_PWD }}
-        run: |
-          echo $MACOS_CERT | base64 --decode > macos_cert.p12
-          security create-keychain -p buildchain build.chain
-          security default-keychain -s build.chain
-          security unlock-keychain -p buildchain build.chain
-          security set-keychain-settings build.chain
-          security import macos_cert.p12 -k build.chain -P $MACOS_CERT_PWD -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k buildchain build.chain
-          rm -f macos_cert.p12
-          # actions/setup-java@v2 removes the directories MacOS and _CodeSignature and the file Info.plist from the JDK, so we cannot use it for the application
-          wget https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_mac_hotspot_21.0.5_11.tar.gz
-          tar zxf OpenJDK21U-jdk_x64_mac_hotspot_21.0.5_11.tar.gz -C $RUNNER_TEMP
-          echo "JAVA_HOME=$RUNNER_TEMP/jdk-21.0.5+11/Contents/Home" >> $GITHUB_ENV
-          echo "$RUNNER_TEMP/jdk-21.0.5+11/Contents/Home/bin" >> $GITHUB_PATH
-          # install tools for DMG creation:
-          npm install --global create-dmg
-          brew install graphicsmagick imagemagick
-      - name: Disable automatic EOL conversions
-        run: git config --global core.autocrlf false
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build with Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew dmg
-        working-directory: kse
-      - name: Store artifacts for release
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-artifact
-          path: kse/build/distributions/kse*.dmg
-
-  macos-arm:
-    name: Create artifacts on macOS for ARM architecture
-    runs-on: macos-14
-    steps:
-      - name: Preparations
-        env:
-          MACOS_CERT: ${{ secrets.MACOS_CERT }}
-          MACOS_CERT_PWD: ${{ secrets.MACOS_CERT_PWD }}
-        run: |
-          echo $MACOS_CERT | base64 --decode > macos_cert.p12
-          security create-keychain -p buildchain build.chain
-          security default-keychain -s build.chain
-          security unlock-keychain -p buildchain build.chain
-          security set-keychain-settings build.chain
-          security import macos_cert.p12 -k build.chain -P $MACOS_CERT_PWD -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k buildchain build.chain
-          rm -f macos_cert.p12
-          # actions/setup-java@v2 removes the directories MacOS and _CodeSignature and the file Info.plist from the JDK, so we cannot use it for the application
-          wget https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.5_11.tar.gz
-          tar zxf OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.5_11.tar.gz -C $RUNNER_TEMP
-          echo "JAVA_HOME=$RUNNER_TEMP/jdk-21.0.5+11/Contents/Home" >> $GITHUB_ENV
-          echo "$RUNNER_TEMP/jdk-21.0.5+11/Contents/Home/bin" >> $GITHUB_PATH
-          # install tools for DMG creation:
-          npm install --global create-dmg
-          brew install graphicsmagick imagemagick
-      - name: Disable automatic EOL conversions
-        run: git config --global core.autocrlf false
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build with Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew dmg
-        working-directory: kse
-      - name: Store artifacts for release
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm-artifact
-          path: kse/build/distributions/kse*.dmg
-
   release:
-    needs: [windows, linux, windows-with-jre, macos, macos-arm]
+    needs: [windows, windows-with-jre]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4.1.7
@@ -209,16 +105,7 @@ jobs:
           name: windows-artifacts
       - uses: actions/download-artifact@v4.1.7
         with:
-          name: linux-artifacts
-      - uses: actions/download-artifact@v4.1.7
-        with:
           name: windows-with-jre-artifact
-      - uses: actions/download-artifact@v4.1.7
-        with:
-          name: macos-artifact
-      - uses: actions/download-artifact@v4.1.7
-        with:
-          name: macos-arm-artifact
       - name: Create a release
         uses: softprops/action-gh-release@v1
         #if: startsWith(github.ref, 'refs/tags/')
@@ -230,17 +117,4 @@ jobs:
             kse-*.zip
             kse-*-setup.exe
             kse-*-setup-no-jre.exe
-            kse*.deb
-            kse*.rpm
-            kse*.dmg
           token: ${{ secrets.github_token }}
-      - name: VirusTotal Scan
-        uses: crazy-max/ghaction-virustotal@v3
-        with:
-          vt_api_key: ${{ secrets.VT_API_KEY }}
-          update_release_body: true
-          files: |
-            kse.exe
-            kse-*.zip
-            kse-*-setup.exe
-            kse-*-setup-no-jre.exe
